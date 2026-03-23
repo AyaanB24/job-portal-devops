@@ -1,56 +1,113 @@
-# Job Connect - Frontend
+# Job Connect — Full-Stack Job Portal 🚀
 
-A modern, high-performance job portal frontend built with React, Vite, and shadcn/ui.
+[![NestJS](https://img.shields.io/badge/NestJS-E0234E?style=for-the-badge&logo=nestjs&logoColor=white)](https://nestjs.com/)
+[![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)](https://reactjs.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-4EA94B?style=for-the-badge&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+[![TailwindCSS](https://img.shields.io/badge/TailwindCSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 
-## Features
+A production-ready job portal featuring MongoDB persistence, Google OAuth, real-time notifications, and a modern TypeScript-first architecture.
 
-- **Job Listings**: Browse and search for available job opportunities.
-- **Job Details**: View comprehensive information about specific roles.
-- **Application Flow**: Seamless job application process for job seekers.
-- **Employer Dashboards**: Tools for companies to manage listings and applicants.
-- **Auth System**: Secure login and registration for different user roles (Job Seekers, Companies, Admins).
-- **Responsive Design**: Fully optimized for various devices and screen sizes.
+---
 
-## Tech Stack
+## 🏗 System Architecture
 
-- **Framework**: [React 18](https://reactjs.org/)
-- **Build Tool**: [Vite](https://vitejs.dev/)
-- **Styling**: [Tailwind CSS](https://tailwindcss.com/)
-- **UI Components**: [shadcn/ui](https://ui.shadcn.com/)
-- **Routing**: [React Router v6](https://reactrouter.com/)
-- **State Management**: [TanStack Query](https://tanstack.com/query/latest)
-- **Icons**: [Lucide React](https://lucide.dev/)
+The following diagram illustrates the interaction between the Frontend, Backend, and Database:
 
-## Getting Started
+```mermaid
+graph TD
+    User([User]) <--> Frontend[React + Vite Frontend]
+    Frontend <--> API_Gateway[NestJS API Gateway]
+    
+    subgraph backend [Backend Services]
+        API_Gateway <--> Auth[Auth Service / Passport / JWT]
+        API_Gateway <--> Jobs[Jobs Service]
+        API_Gateway <--> Apps[Applications Service]
+        API_Gateway <--> Notif[Socket.IO Notifications]
+    end
+    
+    Auth <--> DB[(MongoDB / Mongoose)]
+    Jobs <--> DB
+    Apps <--> DB
+    
+    Notif -.-> |Real-time Updates| Frontend
+```
 
-### Prerequisites
+---
 
-- [Node.js](https://nodejs.org/) (v18 or higher recommended)
-- [npm](https://www.npmjs.com/) or [bun](https://bun.sh/)
+## ✨ Features
 
-### Installation
+- **Multi-Role Support**: specialized dashboards for **Job Seekers**, **Employers**, and **Admins**.
+- **Social Authentication**: Google OAuth integration for Job Seekers (local credentials for Employers).
+- **Persistent Storage**: MongoDB with Mongoose schemas for Users, Jobs, and Applications.
+- **Real-time Notifications**: Socket.IO alerts for job postings, application status updates, and new applicant notifications.
+- **Enterprise-Grade Auth**: JWT-based session management with refresh token capability.
+- **Modern UI**: Built with `shadcn/ui`, `Tailwind CSS`, and `Lucide` icons.
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd job-connect-ui
-   ```
+---
 
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
+## 📥 Getting Started
 
-3. Start the development server:
-   ```bash
-   npm run dev
-   ```
+### 1. Prerequisites
+- **Node.js**: v18+
+- **MongoDB**: Local community server or Atlas URI.
+- **Google Cloud Console**: OAuth Client ID/Secret.
 
-## Project Structure
+### 2. Configuration
+Create a `.env` file in the **`backend`** directory:
+```env
+MONGO_URI=your_mongodb_uri
+JWT_SECRET=your_secret_key
+JWT_EXPIRES_IN=1d
+GOOGLE_CLIENT_ID=your_google_id
+GOOGLE_CLIENT_SECRET=your_google_secret
+GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
+FRONTEND_URL=http://localhost:8080
+PORT=5000
+```
 
-- `src/components`: Reusable UI components and layout elements.
-- `src/pages`: Application views and route handlers.
-- `src/contexts`: React contexts for state management (e.g., Auth).
-- `src/hooks`: Custom React hooks.
-- `src/lib`: Utility functions and shared libraries.
-- `src/services`: API service layers.
+### 3. Installation & Run
+You must open TWO separate terminals:
+
+#### **Terminal 1: Backend**
+```bash
+cd backend
+npm install
+npm run start:dev
+```
+
+#### **Terminal 2: Frontend**
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+## 📦 Project Structure
+
+```text
+├── backend/
+│   ├── src/
+│   │   ├── auth/           # JWT & Google OAuth Logic
+│   │   ├── common/         # Mongoose Schemas & Global Guards
+│   │   ├── jobs/           # Job Management
+│   │   ├── applications/   # Application Tracking
+│   │   └── notifications/  # WebSocket Gateway
+│   └── .env                # Server Credentials
+├── frontend/
+│   ├── src/
+│   │   ├── components/     # UI Design System
+│   │   ├── services/       # API Communications
+│   │   ├── contexts/       # Auth & State Management
+│   │   └── pages/          # Dashboard & Public Routes
+└── README.md               # You are here
+```
+
+---
+
+## 🛡 Security Rules
+- **Access Control**: Roles are strictly checked at the API level (e.g., Only employers can post jobs).
+- **Google OAuth**: Restricted only to Job Seekers (Employers must use business email/password).
+- **Encryption**: All passwords are hashed using `bcrypt` (10 rounds).
+- **Data Protection**: Sensitive fields (like passwords) are never returned in JSON responses.

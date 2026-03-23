@@ -2,100 +2,206 @@ import {
   Injectable,
   UnauthorizedException,
   ConflictException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { DatabaseService } from '../common/database.service';
-import { RegisterDto, LoginDto } from './dto/auth.dto';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model } from 'mongoose';
+import { User } from '../common/schemas/user.schema';
+import { RegisterDto, LoginDto, CompanyRegisterDto, SeekerRegisterDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
-import { randomUUID } from 'crypto';
-import { UserRole } from '../common/interfaces/entities.interface';
+import { UserRole, AuthProvider } from '../common/interfaces/entities.interface';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class AuthService {
   constructor(
-    private readonly db: DatabaseService,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
   ) {}
 
+  // ─── Generic register (backward compat) ────────────────────────
   async register(dto: RegisterDto) {
-    const existingUser = await this.db.findUserByEmail(dto.email);
-    if (existingUser) {
+    const existing = await this.userModel.findOne({ email: dto.email.toLowerCase() });
+    if (existing) {
       throw new ConflictException('Email already exists');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-    const user = {
-      id: randomUUID(),
-      ...dto,
+    const user = await this.userModel.create({
+      name: dto.name,
+      email: dto.email.toLowerCase(),
       password: hashedPassword,
-      createdAt: new Date(),
-    };
+      role: dto.role,
+      authProvider: AuthProvider.LOCAL,
+    });
 
-    await this.db.saveUser(user);
-    return this.generateTokens(user.id, user.role);
+    return this.generateTokenResponse(user);
   }
 
+  // ─── Company signup (email only) ────────────────────────────────
+  async companyRegister(dto: CompanyRegisterDto) {
+    const existing = await this.userModel.findOne({ email: dto.email.toLowerCase() });
+    if (existing) {
+      throw new ConflictException('Email already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const user = await this.userModel.create({
+      name: dto.name,
+      email: dto.email.toLowerCase(),
+      password: hashedPassword,
+      role: UserRole.EMPLOYER,
+      authProvider: AuthProvider.LOCAL,
+      companyDetails: {
+        companyName: dto.companyName,
+        website: dto.website || '',
+        verified: false,
+      },
+    });
+
+    return this.generateTokenResponse(user);
+  }
+
+  // ─── Seeker signup (email) ──────────────────────────────────────
+  async seekerRegister(dto: SeekerRegisterDto) {
+    const existing = await this.userModel.findOne({ email: dto.email.toLowerCase() });
+    if (existing) {
+      throw new ConflictException('Email already exists');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const user = await this.userModel.create({
+      name: dto.name,
+      email: dto.email.toLowerCase(),
+      password: hashedPassword,
+      role: UserRole.JOB_SEEKER,
+      authProvider: AuthProvider.LOCAL,
+    });
+
+    return this.generateTokenResponse(user);
+  }
+
+  // ─── Login (email/password) ─────────────────────────────────────
   async login(dto: LoginDto) {
-    const user = await this.db.findUserByEmail(dto.email);
-    if (!user || !(await bcrypt.compare(dto.password, user.password))) {
+    const user = await this.userModel.findOne({ email: dto.email.toLowerCase() });
+    if (!user || !user.password) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    return this.generateTokens(user.id, user.role);
-  }
-
-  async refreshToken(token: string) {
-    const rt = this.db.refreshTokens.find(
-      (t) => t.token === token && t.expiresAt > new Date(),
-    );
-    if (!rt) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
+    const passwordMatch = await bcrypt.compare(dto.password, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Invalid credentials');
     }
 
-    const user = await this.db.findUserById(rt.userId);
-    if (!user) {
-      throw new UnauthorizedException();
-    }
-
-    // Remove used token
-    this.db.refreshTokens = this.db.refreshTokens.filter(
-      (t) => t.token !== token,
-    );
-
-    return this.generateTokens(user.id, user.role);
+    return this.generateTokenResponse(user);
   }
 
-  private async generateTokens(userId: string, role: UserRole) {
-    const payload = { sub: userId, role };
+  // ─── Company login (email only, enforce role) ───────────────────
+  async companyLogin(dto: LoginDto) {
+    const user = await this.userModel.findOne({ email: dto.email.toLowerCase() });
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (user.role !== UserRole.EMPLOYER) {
+      throw new ForbiddenException('This login is for companies only');
+    }
 
-    const accessToken = await this.jwtService.signAsync(payload, {
-      secret: process.env.JWT_SECRET || 'super-secret-key',
-      expiresIn: (process.env.JWT_EXPIRES_IN || '1h') as any,
+    const passwordMatch = await bcrypt.compare(dto.password, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return this.generateTokenResponse(user);
+  }
+
+  // ─── Seeker login (email) ──────────────────────────────────────
+  async seekerLogin(dto: LoginDto) {
+    const user = await this.userModel.findOne({ email: dto.email.toLowerCase() });
+    if (!user || !user.password) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    if (user.role !== UserRole.JOB_SEEKER) {
+      throw new ForbiddenException('This login is for job seekers only');
+    }
+
+    const passwordMatch = await bcrypt.compare(dto.password, user.password);
+    if (!passwordMatch) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    return this.generateTokenResponse(user);
+  }
+
+  // ─── Google OAuth handler ──────────────────────────────────────
+  async googleLogin(profile: any) {
+    const { id: googleId, emails, displayName, photos } = profile;
+    const email = emails[0].value.toLowerCase();
+    const profilePic = photos?.[0]?.value || '';
+
+    let user = await this.userModel.findOne({ email });
+
+    if (user) {
+      // If existing user is a company, BLOCK Google login
+      if (user.role === UserRole.EMPLOYER) {
+        throw new ForbiddenException('Companies cannot login via Google');
+      }
+      // Update Google info if needed
+      if (!user.googleId) {
+        user.googleId = googleId;
+        user.profilePic = profilePic;
+        await user.save();
+      }
+    } else {
+      // Create new seeker user via Google
+      user = await this.userModel.create({
+        name: displayName,
+        email,
+        role: UserRole.JOB_SEEKER,
+        authProvider: AuthProvider.GOOGLE,
+        googleId,
+        profilePic,
+      });
+    }
+
+    const token = await this.generateJwtToken(user);
+    return { token, user };
+  }
+
+  // ─── Token generation ──────────────────────────────────────────
+  private async generateJwtToken(user: User): Promise<string> {
+    const payload = {
+      sub: user._id.toString(),
+      email: user.email,
+      role: user.role,
+    };
+
+    return this.jwtService.signAsync(payload, {
+      secret: this.configService.get<string>('JWT_SECRET'),
+      expiresIn: this.configService.get<string>('JWT_EXPIRES_IN') || '1h',
     });
+  }
 
-    const refreshToken = randomUUID();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 days
-
-    this.db.refreshTokens.push({
-      userId,
-      token: refreshToken,
-      expiresAt,
-    });
+  private async generateTokenResponse(user: User) {
+    const accessToken = await this.generateJwtToken(user);
 
     return {
       accessToken,
-      refreshToken,
       user: {
-        id: userId,
-        role,
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        authProvider: user.authProvider,
+        profilePic: user.profilePic,
+        companyDetails: user.companyDetails,
       },
     };
   }
 
-  async logout(token: string) {
-    this.db.refreshTokens = this.db.refreshTokens.filter(
-      (t) => t.token !== token,
-    );
+  // ─── Find user by ID (used by JWT strategy) ────────────────────
+  async findUserById(id: string): Promise<User | null> {
+    return this.userModel.findById(id);
   }
 }

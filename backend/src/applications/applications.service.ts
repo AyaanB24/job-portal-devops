@@ -4,69 +4,93 @@ import {
   ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
-import { DatabaseService } from '../common/database.service';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { Application } from '../common/schemas/application.schema';
+import { Job } from '../common/schemas/job.schema';
+import { User } from '../common/schemas/user.schema';
 import { CreateApplicationDto } from './dto/applications.dto';
 import { UpdateApplicationStatusDto } from './dto/update-status.dto';
-import { randomUUID } from 'crypto';
 import { ApplicationStatus } from '../common/interfaces/entities.interface';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class ApplicationsService {
   constructor(
-    private readonly db: DatabaseService,
+    @InjectModel(Application.name) private readonly applicationModel: Model<Application>,
+    @InjectModel(Job.name) private readonly jobModel: Model<Job>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly notifications: NotificationsGateway,
   ) {}
 
   async create(dto: CreateApplicationDto, userId: string) {
-    const job = await this.db.findJobById(dto.jobId);
+    const job = await this.jobModel.findById(dto.jobId);
     if (!job) throw new NotFoundException('Job not found');
 
-    const existing = await this.db.findApplication(dto.jobId, userId);
+    const existing = await this.applicationModel.findOne({
+      jobId: new Types.ObjectId(dto.jobId),
+      applicantId: new Types.ObjectId(userId),
+    });
     if (existing) throw new ConflictException('Already applied for this job');
 
-    const application = {
-      id: randomUUID(),
-      ...dto,
-      applicantId: userId,
-      companyId: job.companyId,
+    const application = await this.applicationModel.create({
+      jobId: new Types.ObjectId(dto.jobId),
+      applicantId: new Types.ObjectId(userId),
+      companyId: job.createdBy,
+      resumeLink: dto.resumeLink,
+      coverLetter: dto.coverLetter,
+      phoneNumber: dto.phoneNumber,
+      experienceYears: dto.experienceYears,
+      portfolioUrl: dto.portfolioUrl,
       status: ApplicationStatus.PENDING,
-      appliedAt: new Date(),
-    };
-
-    await this.db.saveApplication(application as any);
+    });
 
     // Notify employer
-    this.notifications.notifyNewApplication(job.createdBy, application);
+    this.notifications.notifyNewApplication(job.createdBy.toString(), application);
 
     return application;
   }
 
   async findMy(userId: string) {
-    return this.db.applications
-      .filter((a) => a.applicantId === userId)
-      .map((a) => {
-        const job = this.db.jobs.find((j) => j.id === a.jobId);
-        const company = this.db.companies.find((c) => c.id === a.companyId);
+    const applications = await this.applicationModel
+      .find({ applicantId: new Types.ObjectId(userId) })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const enriched = await Promise.all(
+      applications.map(async (app) => {
+        const job = await this.jobModel.findById(app.jobId).lean();
+        const company = await this.userModel.findById(app.companyId).lean();
         return {
-          ...a,
+          ...app,
+          id: app._id.toString(),
           jobTitle: job?.title || 'Unknown Job',
           jobStatus: job?.status || 'UNKNOWN',
-          companyName: company?.companyName || 'Unknown Company',
+          companyName: company?.companyDetails?.companyName || company?.name || 'Unknown Company',
         };
-      });
+      }),
+    );
+
+    return enriched;
   }
 
   async findAll() {
-    return this.db.applications.map((a) => {
-      const job = this.db.jobs.find((j) => j.id === a.jobId);
-      const user = this.db.users.find((u) => u.id === a.applicantId);
-      return {
-        ...a,
-        jobTitle: job?.title || 'Unknown Job',
-        applicantName: user?.name || 'Unknown User',
-      };
-    });
+    const applications = await this.applicationModel.find().sort({ createdAt: -1 }).lean();
+
+    const enriched = await Promise.all(
+      applications.map(async (app) => {
+        const job = await this.jobModel.findById(app.jobId).lean();
+        const user = await this.userModel.findById(app.applicantId).lean();
+        return {
+          ...app,
+          id: app._id.toString(),
+          jobTitle: job?.title || 'Unknown Job',
+          applicantName: user?.name || 'Unknown User',
+        };
+      }),
+    );
+
+    return enriched;
   }
 
   async updateStatus(
@@ -75,22 +99,21 @@ export class ApplicationsService {
     userId: string,
     role: string,
   ) {
-    const app = await this.db.findApplicationById(id);
+    const app = await this.applicationModel.findById(id);
     if (!app) throw new NotFoundException('Application not found');
 
-    const job = await this.db.findJobById(app.jobId);
-    if (!job)
-      throw new NotFoundException('Job associated with application not found');
+    const job = await this.jobModel.findById(app.jobId);
+    if (!job) throw new NotFoundException('Job associated with application not found');
 
-    // Only Admin or the Employer who posted the job can update status
-    // For testing/demo, we allow all authorized roles from controller (seeker allowed too)
-    // if (role !== 'ADMIN' && job.createdBy !== userId) { ... }
-
-    const updated = await this.db.updateApplication(id, { status: dto.status });
+    const updated = await this.applicationModel.findByIdAndUpdate(
+      id,
+      { $set: { status: dto.status } },
+      { new: true },
+    );
 
     // Notify applicant
-    this.notifications.notifyApplicationStatus(app.applicantId, {
-      ...updated,
+    this.notifications.notifyApplicationStatus(app.applicantId.toString(), {
+      ...updated.toObject(),
       job: { title: job.title },
     });
 
@@ -98,22 +121,26 @@ export class ApplicationsService {
   }
 
   async findByJob(jobId: string, userId: string, role: string) {
-    const job = await this.db.findJobById(jobId);
+    const job = await this.jobModel.findById(jobId);
     if (!job) throw new NotFoundException('Job not found');
 
-    // Admin can see everything, Employer only their own jobs
-    // For testing, we allow seekers to view for now if they have permission from controller
-    // if (role !== 'ADMIN' && job.createdBy !== userId) { ... }
+    const applications = await this.applicationModel
+      .find({ jobId: new Types.ObjectId(jobId) })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    return this.db.applications
-      .filter((a) => a.jobId === jobId)
-      .map((a) => {
-        const user = this.db.users.find((u) => u.id === a.applicantId);
+    const enriched = await Promise.all(
+      applications.map(async (app) => {
+        const user = await this.userModel.findById(app.applicantId).lean();
         return {
-          ...a,
+          ...app,
+          id: app._id.toString(),
           applicantName: user?.name || 'Unknown User',
           applicantEmail: user?.email || 'Unknown Email',
         };
-      });
+      }),
+    );
+
+    return enriched;
   }
 }

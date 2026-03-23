@@ -203,4 +203,19 @@ export const apiService = {
     // Backend doesn't have block user yet, mock it
     await new Promise(r => setTimeout(r, 400));
   },
+  
+  async getMe(): Promise<User> {
+    const response = await fetch(`${API_URL}/auth/me`, {
+      headers: getHeaders(),
+    });
+
+    if (!response.ok) throw new Error("Failed to fetch me");
+
+    const data = await response.json();
+    return {
+      ...data.user,
+      role: mapRoleFromBE(data.user.role),
+      createdAt: new Date().toISOString(),
+    };
+  },
 };

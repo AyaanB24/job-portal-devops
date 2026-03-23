@@ -3,113 +3,148 @@ import {
   NotFoundException,
   ForbiddenException,
 } from '@nestjs/common';
-import { DatabaseService } from '../common/database.service';
+import { InjectModel } from '@nestjs/mongoose';
+import { Model, Types } from 'mongoose';
+import { Job } from '../common/schemas/job.schema';
+import { Application } from '../common/schemas/application.schema';
+import { User } from '../common/schemas/user.schema';
 import { CreateJobDto, UpdateJobDto, JobQueryDto } from './dto/jobs.dto';
-import { randomUUID } from 'crypto';
 import { JobStatus } from '../common/interfaces/entities.interface';
 import { NotificationsGateway } from '../notifications/notifications.gateway';
 
 @Injectable()
 export class JobsService {
   constructor(
-    private readonly db: DatabaseService,
+    @InjectModel(Job.name) private readonly jobModel: Model<Job>,
+    @InjectModel(Application.name) private readonly applicationModel: Model<Application>,
+    @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly notifications: NotificationsGateway,
   ) {}
 
   async create(dto: CreateJobDto, userId: string) {
-    const job = {
-      id: randomUUID(),
-      ...dto,
-      companyId: 'c1', // Mock company ID
-      status: JobStatus.ACTIVE,
-      createdBy: userId,
-      createdAt: new Date(),
-    };
+    const user = await this.userModel.findById(userId);
 
-    await this.db.saveJob(job as any);
+    const job = await this.jobModel.create({
+      ...dto,
+      companyId: new Types.ObjectId(userId),
+      status: JobStatus.ACTIVE,
+      createdBy: new Types.ObjectId(userId),
+    });
+
     this.notifications.notifyNewJob(job);
     return job;
   }
 
   async findAll(query: JobQueryDto, userId?: string) {
-    let filtered = this.db.jobs.filter((j) => j.status === JobStatus.ACTIVE);
+    const filter: any = { status: JobStatus.ACTIVE };
 
     if (query.search) {
-      const s = query.search.toLowerCase();
-      filtered = filtered.filter(
-        (j) =>
-          j.title.toLowerCase().includes(s) ||
-          j.description.toLowerCase().includes(s) ||
-          j.skills.some((sk) => sk.toLowerCase().includes(s)),
-      );
+      const regex = new RegExp(query.search, 'i');
+      filter.$or = [
+        { title: regex },
+        { description: regex },
+        { skills: { $in: [regex] } },
+      ];
     }
 
     if (query.location) {
-      filtered = filtered.filter((j) =>
-        j.location.toLowerCase().includes(query.location.toLowerCase()),
-      );
+      filter.location = new RegExp(query.location, 'i');
     }
 
-    // Attach application status if userId provided
-    return filtered.map((j) => {
-      const app = this.db.applications.find(
-        (a) => a.jobId === j.id && a.applicantId === userId,
-      );
-      const company = this.db.companies.find((c) => c.id === j.companyId);
-      return {
-        ...j,
-        company: company?.companyName || 'Unknown Company',
-        applicants: this.db.applications.filter((a) => a.jobId === j.id).length,
-        applicationStatus: app ? app.status : null,
-      };
-    });
+    const jobs = await this.jobModel.find(filter).sort({ createdAt: -1 }).lean();
+
+    // Enrich with applicant count and company name
+    const enriched = await Promise.all(
+      jobs.map(async (job) => {
+        const applicants = await this.applicationModel.countDocuments({ jobId: job._id });
+        const creator = await this.userModel.findById(job.createdBy).lean();
+        const companyName = creator?.companyDetails?.companyName || creator?.name || 'Unknown Company';
+
+        let applicationStatus = null;
+        if (userId) {
+          const app = await this.applicationModel.findOne({
+            jobId: job._id,
+            applicantId: new Types.ObjectId(userId),
+          });
+          applicationStatus = app?.status || null;
+        }
+
+        return {
+          ...job,
+          id: job._id.toString(),
+          company: companyName,
+          applicants,
+          applicationStatus,
+        };
+      }),
+    );
+
+    return enriched;
   }
 
   async findEmployerJobs(userId: string) {
-    return this.db.jobs
-      .filter((j) => j.createdBy === userId && j.status === JobStatus.ACTIVE)
-      .map((j) => {
+    const jobs = await this.jobModel
+      .find({ createdBy: new Types.ObjectId(userId), status: JobStatus.ACTIVE })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const enriched = await Promise.all(
+      jobs.map(async (job) => {
+        const applicants = await this.applicationModel.countDocuments({ jobId: job._id });
         return {
-          ...j,
-          applicants: this.db.applications.filter((a) => a.jobId === j.id)
-            .length,
+          ...job,
+          id: job._id.toString(),
+          applicants,
         };
-      });
+      }),
+    );
+
+    return enriched;
   }
 
   async findOne(id: string, userId?: string) {
-    const job = await this.db.findJobById(id);
+    const job = await this.jobModel.findById(id).lean();
     if (!job) throw new NotFoundException('Job not found');
 
-    const company = this.db.companies.find((c) => c.id === job.companyId);
-    const app = this.db.applications.find(
-      (a) => a.jobId === id && a.applicantId === userId,
-    );
+    const creator = await this.userModel.findById(job.createdBy).lean();
+    const companyName = creator?.companyDetails?.companyName || creator?.name || 'Unknown Company';
+    const applicants = await this.applicationModel.countDocuments({ jobId: job._id });
+
+    let applicationStatus = null;
+    if (userId) {
+      const app = await this.applicationModel.findOne({
+        jobId: job._id,
+        applicantId: new Types.ObjectId(userId),
+      });
+      applicationStatus = app?.status || null;
+    }
 
     return {
       ...job,
-      company: company?.companyName || 'Unknown Company',
-      applicants: this.db.applications.filter((a) => a.jobId === id).length,
-      applicationStatus: app ? app.status : null,
+      id: job._id.toString(),
+      company: companyName,
+      applicants,
+      applicationStatus,
     };
   }
 
   async update(id: string, dto: UpdateJobDto, userId: string) {
-    const job = await this.db.findJobById(id);
+    const job = await this.jobModel.findById(id);
     if (!job) throw new NotFoundException('Job not found');
 
-    // Admin or Creator (For testing, allowed for all roles in controller)
-    // if (job.createdBy !== userId) throw new ForbiddenException();
-
-    return this.db.updateJob(id, dto);
+    return this.jobModel.findByIdAndUpdate(id, { $set: dto }, { new: true });
   }
 
   async remove(id: string, userId: string) {
-    const job = await this.db.findJobById(id);
+    const job = await this.jobModel.findById(id);
     if (!job) throw new NotFoundException('Job not found');
 
-    if (job.createdBy !== userId) throw new ForbiddenException();
+    if (job.createdBy.toString() !== userId) throw new ForbiddenException();
 
-    return this.db.updateJob(id, { status: JobStatus.DELETED });
+    return this.jobModel.findByIdAndUpdate(
+      id,
+      { $set: { status: JobStatus.DELETED } },
+      { new: true },
+    );
   }
 }

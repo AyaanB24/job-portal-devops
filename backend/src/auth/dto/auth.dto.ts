@@ -1,6 +1,6 @@
-import { IsEmail, IsString, MinLength, IsEnum, IsNotEmpty } from 'class-validator';
+import { IsEmail, IsString, MinLength, IsEnum, IsNotEmpty, IsOptional } from 'class-validator';
 import { UserRole } from '../../common/interfaces/entities.interface';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDto {
   @ApiProperty()
@@ -30,5 +30,47 @@ export class LoginDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
+  password: string;
+}
+
+export class CompanyRegisterDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty()
+  @IsEmail()
+  email: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(6)
+  password: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  companyName: string;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  website?: string;
+}
+
+export class SeekerRegisterDto {
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ApiProperty()
+  @IsEmail()
+  email: string;
+
+  @ApiProperty()
+  @IsString()
+  @MinLength(6)
   password: string;
 }

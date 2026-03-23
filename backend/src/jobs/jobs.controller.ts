@@ -22,12 +22,12 @@ import { OptionalJwtGuard } from '../auth/guards/optional-jwt.guard';
 @ApiTags('jobs')
 @Controller('jobs')
 export class JobsController {
-  constructor(private readonly jobsService: JobsService) { }
+  constructor(private readonly jobsService: JobsService) {}
 
   @Post()
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(UserRole.JOB_SEEKER, UserRole.EMPLOYER, UserRole.ADMIN)
+  @Roles(UserRole.EMPLOYER, UserRole.ADMIN)
   @ApiOperation({ summary: 'Post a new job' })
   create(@Req() req: any, @Body() dto: CreateJobDto) {
     return this.jobsService.create(dto, req.user.userId);
@@ -45,7 +45,7 @@ export class JobsController {
   @Get('my-jobs')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(UserRole.JOB_SEEKER, UserRole.EMPLOYER, UserRole.ADMIN)
+  @Roles(UserRole.EMPLOYER, UserRole.ADMIN)
   @ApiOperation({ summary: 'Get jobs created by the current employer' })
   findMyJobs(@Req() req: any) {
     return this.jobsService.findEmployerJobs(req.user.userId);
@@ -63,7 +63,7 @@ export class JobsController {
   @Put(':id')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles(UserRole.JOB_SEEKER, UserRole.EMPLOYER, UserRole.ADMIN)
+  @Roles(UserRole.EMPLOYER, UserRole.ADMIN)
   @ApiOperation({ summary: 'Update a job' })
   update(@Param('id') id: string, @Req() req: any, @Body() dto: UpdateJobDto) {
     return this.jobsService.update(id, dto, req.user.userId);

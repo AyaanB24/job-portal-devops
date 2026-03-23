@@ -11,6 +11,7 @@ interface AuthState {
 interface AuthContextType extends AuthState {
   login: (payload: LoginPayload) => Promise<void>;
   register: (payload: RegisterPayload) => Promise<void>;
+  initializeSession: (token: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -46,6 +47,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const initializeSession = useCallback(async (token: string) => {
+    localStorage.setItem("accessToken", token);
+    setState((s) => ({ ...s, isLoading: true }));
+    try {
+      const user = await apiService.getMe();
+      localStorage.setItem("user", JSON.stringify(user));
+      setState({ user, isAuthenticated: true, isLoading: false });
+    } catch (err: any) {
+      localStorage.removeItem("accessToken");
+      setState((s) => ({ ...s, isLoading: false }));
+      throw new Error(err.message || "Session initialization failed");
+    }
+  }, []);
+
   const logout = useCallback(() => {
     localStorage.removeItem("user");
     localStorage.removeItem("accessToken");
@@ -54,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ ...state, login, register, logout }}>
+    <AuthContext.Provider value={{ ...state, login, register, initializeSession, logout }}>
       {children}
     </AuthContext.Provider>
   );
