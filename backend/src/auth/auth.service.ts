@@ -10,8 +10,10 @@ import { Model } from 'mongoose';
 import { User } from '../common/schemas/user.schema';
 import { RegisterDto, LoginDto, CompanyRegisterDto, SeekerRegisterDto } from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
+import * as crypto from 'crypto';
 import { UserRole, AuthProvider } from '../common/interfaces/entities.interface';
 import { ConfigService } from '@nestjs/config';
+import { MailService } from '../common/services/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -19,6 +21,7 @@ export class AuthService {
     @InjectModel(User.name) private readonly userModel: Model<User>,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly mailService: MailService,
   ) {}
 
   // ─── Generic register (backward compat) ────────────────────────
@@ -48,18 +51,23 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+
     const user = await this.userModel.create({
       name: dto.name,
       email: dto.email.toLowerCase(),
       password: hashedPassword,
       role: UserRole.EMPLOYER,
       authProvider: AuthProvider.LOCAL,
+      verificationToken,
       companyDetails: {
         companyName: dto.companyName,
         website: dto.website || '',
         verified: false,
       },
     });
+
+    await this.mailService.sendVerificationEmail(user.email, verificationToken, dto.companyName);
 
     return this.generateTokenResponse(user);
   }
@@ -95,6 +103,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (user.role === UserRole.EMPLOYER && user.companyDetails && !user.companyDetails.verified) {
+      throw new UnauthorizedException('Please verify your company email address to access the platform. Check your inbox.');
+    }
+
     return this.generateTokenResponse(user);
   }
 
@@ -106,6 +118,9 @@ export class AuthService {
     }
     if (user.role !== UserRole.EMPLOYER) {
       throw new ForbiddenException('This login is for companies only');
+    }
+    if (user.companyDetails && !user.companyDetails.verified) {
+      throw new UnauthorizedException('Please verify your company email address to access the platform. Check your inbox.');
     }
 
     const passwordMatch = await bcrypt.compare(dto.password, user.password);
@@ -132,6 +147,21 @@ export class AuthService {
     }
 
     return this.generateTokenResponse(user);
+  }
+
+  // ─── Company Verification ────────────────────────────────────────
+  async verifyCompany(token: string) {
+    const user = await this.userModel.findOne({ verificationToken: token });
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired verification token');
+    }
+
+    await this.userModel.findByIdAndUpdate(user._id, {
+      $set: { 'companyDetails.verified': true },
+      $unset: { verificationToken: 1 }
+    });
+
+    return { message: 'Company identity successfully verified' };
   }
 
   // ─── Google OAuth handler ──────────────────────────────────────

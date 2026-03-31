@@ -32,7 +32,10 @@ const mapRoleFromBE = (role: string): UserRole => {
 
 export const apiService = {
   async login(payload: LoginPayload): Promise<User> {
-    const response = await fetch(`${API_URL}/auth/login`, {
+    const isCompany = payload.role === "company";
+    const endpoint = isCompany ? "/auth/company/login" : "/auth/seeker/login";
+
+    const response = await fetch(`${API_URL}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -57,14 +60,26 @@ export const apiService = {
     };
   },
 
-  async register(payload: RegisterPayload): Promise<{ success: boolean }> {
-    const response = await fetch(`${API_URL}/auth/register`, {
+  async register(payload: RegisterPayload & { companyName?: string }): Promise<{ success: boolean }> {
+    const isCompany = payload.role === "company";
+    const endpoint = isCompany ? "/auth/company/signup" : "/auth/seeker/signup";
+    
+    // For company we need companyName, default to name if missing 
+    const body = isCompany ? {
+      name: payload.name,
+      email: payload.email,
+      password: payload.password,
+      companyName: payload.companyName || payload.name,
+    } : {
+      name: payload.name,
+      email: payload.email,
+      password: payload.password,
+    };
+
+    const response = await fetch(`${API_URL}${endpoint}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ...payload,
-        role: mapRoleToBE(payload.role),
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -73,6 +88,21 @@ export const apiService = {
     }
 
     return { success: true };
+  },
+
+  async verifyCompany(token: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_URL}/auth/company/verify`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Verification failed");
+    }
+
+    return response.json();
   },
 
   async getJobs(): Promise<Job[]> {

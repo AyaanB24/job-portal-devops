@@ -31,7 +31,23 @@ export class RolesGuard implements CanActivate {
       return true;
     }
 
-    const hasRole = requiredRoles.some((role) => String(role).toUpperCase() === userRoleStr);
+    // Strict Company Verification Check
+    if (userRoleStr === 'EMPLOYER') {
+      if (user.companyDetails && user.companyDetails.verified === false) {
+        console.log('RolesGuard: Company email not verified. Access DENIED.');
+        return false;
+      }
+    }
+
+    const hasRole = requiredRoles.some((role) => {
+      const r = String(role).toUpperCase();
+      const u = userRoleStr;
+      if (r === u) return true;
+      if (r === 'EMPLOYER' && u === 'COMPANY') return true;
+      if (r === 'JOB_SEEKER' && u === 'JOBSEEKER') return true;
+      return false;
+    });
+
     console.log(`RolesGuard: Match result: ${hasRole ? 'GRANTED' : 'DENIED (Role mismatch)'}`);
     return hasRole;
   }

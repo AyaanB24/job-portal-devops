@@ -10,7 +10,7 @@ interface AuthState {
 
 interface AuthContextType extends AuthState {
   login: (payload: LoginPayload) => Promise<void>;
-  register: (payload: RegisterPayload) => Promise<void>;
+  register: (payload: RegisterPayload & { companyName?: string }) => Promise<void>;
   initializeSession: (token: string) => Promise<void>;
   logout: () => void;
 }
@@ -36,7 +36,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const register = useCallback(async (payload: RegisterPayload) => {
+  const register = useCallback(async (payload: RegisterPayload & { companyName?: string }) => {
     setState((s) => ({ ...s, isLoading: true }));
     try {
       await apiService.register(payload);

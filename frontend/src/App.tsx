@@ -17,6 +17,7 @@ import CompanyDashboard from "@/pages/CompanyDashboard";
 import JobApplicants from "@/pages/JobApplicants";
 import PostJob from "@/pages/PostJob";
 import AdminDashboard from "@/pages/AdminDashboard";
+import VerifyCompany from "@/pages/VerifyCompany";
 import NotFound from "@/pages/NotFound";
 
 import { NotificationProvider } from "@/contexts/NotificationContext";
@@ -31,15 +32,17 @@ const App = () => (
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <AuthProvider>
           <NotificationProvider>
-            <div className="flex flex-col min-h-screen">
+            <div className="flex flex-col min-h-screen relative">
+              <div className="noise" />
               <Navbar />
-              <main className="flex-1">
+              <main className="flex-1 pt-20 md:pt-24">
                 <Routes>
                   <Route path="/" element={<JobList />} />
                   <Route path="/jobs" element={<JobList />} />
                   <Route path="/jobs/:id" element={<JobDetails />} />
                   <Route path="/login" element={<Login />} />
                   <Route path="/register" element={<Register />} />
+                  <Route path="/verify-company" element={<VerifyCompany />} />
                   <Route
                     path="/apply/:id"
                     element={

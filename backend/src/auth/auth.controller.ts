@@ -34,6 +34,12 @@ export class AuthController {
     return this.authService.companyRegister(dto);
   }
 
+  @Post('company/verify')
+  @ApiOperation({ summary: 'Verify company email' })
+  verifyCompany(@Body('token') token: string) {
+    return this.authService.verifyCompany(token);
+  }
+
   @Post('company/login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login as company (email only)' })

@@ -3,6 +3,7 @@ import { MongooseModule } from '@nestjs/mongoose';
 import { User, UserSchema } from './schemas/user.schema';
 import { Job, JobSchema } from './schemas/job.schema';
 import { Application, ApplicationSchema } from './schemas/application.schema';
+import { MailService } from './services/mail.service';
 
 @Global()
 @Module({
@@ -13,6 +14,7 @@ import { Application, ApplicationSchema } from './schemas/application.schema';
       { name: Application.name, schema: ApplicationSchema },
     ]),
   ],
-  exports: [MongooseModule],
+  providers: [MailService],
+  exports: [MongooseModule, MailService],
 })
 export class CommonModule {}

@@ -39,6 +39,9 @@ export class User extends Document {
     resumeLink?: string;
   };
 
+  @Prop()
+  verificationToken?: string;
+
   createdAt: Date;
   updatedAt: Date;
 }
