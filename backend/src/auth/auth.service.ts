@@ -196,7 +196,18 @@ export class AuthService {
     }
 
     const token = await this.generateJwtToken(user);
-    return { token, user };
+    return {
+      token,
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        authProvider: user.authProvider,
+        profilePic: user.profilePic,
+        companyDetails: user.companyDetails,
+      },
+    };
   }
 
   // ─── Token generation ──────────────────────────────────────────

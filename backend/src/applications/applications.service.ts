@@ -48,7 +48,11 @@ export class ApplicationsService {
     // Notify employer
     this.notifications.notifyNewApplication(job.createdBy.toString(), application);
 
-    return application;
+    return {
+      ...application.toObject(),
+      id: application._id.toString(),
+      appliedAt: (application as any).createdAt || new Date(),
+    };
   }
 
   async findMy(userId: string) {
@@ -67,6 +71,7 @@ export class ApplicationsService {
           jobTitle: job?.title || 'Unknown Job',
           jobStatus: job?.status || 'UNKNOWN',
           companyName: company?.companyDetails?.companyName || company?.name || 'Unknown Company',
+          appliedAt: app.createdAt,
         };
       }),
     );
@@ -86,6 +91,7 @@ export class ApplicationsService {
           id: app._id.toString(),
           jobTitle: job?.title || 'Unknown Job',
           applicantName: user?.name || 'Unknown User',
+          appliedAt: app.createdAt,
         };
       }),
     );
@@ -137,6 +143,7 @@ export class ApplicationsService {
           id: app._id.toString(),
           applicantName: user?.name || 'Unknown User',
           applicantEmail: user?.email || 'Unknown Email',
+          appliedAt: app.createdAt,
         };
       }),
     );

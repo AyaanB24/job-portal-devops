@@ -68,7 +68,7 @@ export class AuthController {
     const user = await this.authService.findUserById(req.user.userId);
     return {
       user: {
-        id: user._id,
+        id: user._id.toString(),
         name: user.name,
         email: user.email,
         role: user.role,

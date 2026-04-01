@@ -56,7 +56,7 @@ export const apiService = {
     return {
       ...data.user,
       role: mapRoleFromBE(data.user.role),
-      createdAt: new Date().toISOString(),
+      createdAt: data.user.createdAt || new Date().toISOString(),
     };
   },
 
@@ -245,7 +245,7 @@ export const apiService = {
     return {
       ...data.user,
       role: mapRoleFromBE(data.user.role),
-      createdAt: new Date().toISOString(),
+      createdAt: data.user.createdAt || new Date().toISOString(),
     };
   },
 };

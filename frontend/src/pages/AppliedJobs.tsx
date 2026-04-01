@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { socketService } from "@/services/socket";
+import { useAuth } from "@/contexts/AuthContext";
 
 const statusColors: any = {
   PENDING: "bg-amber-500/10 text-amber-400 border-amber-500/20",
@@ -19,16 +20,18 @@ const statusColors: any = {
 
 const AppliedJobs = () => {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
 
   const { data: applications = [], isLoading } = useQuery({
-    queryKey: ["applications", "my"],
+    queryKey: ["applications", "my", user?.id],
     queryFn: () => apiService.getApplications(),
+    enabled: !!user?.id,
   });
 
   useEffect(() => {
     socketService.onApplicationStatusUpdate((app: any) => {
-      queryClient.invalidateQueries({ queryKey: ["applications", "my"] });
+      queryClient.invalidateQueries({ queryKey: ["applications", "my", user?.id] });
       
       const formattedStatus = app.status.replace('_', ' ');
       toast({

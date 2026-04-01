@@ -21,7 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<AuthState>({
     user: JSON.parse(localStorage.getItem("user") || "null"),
     isAuthenticated: !!localStorage.getItem("accessToken"),
-    isLoading: false,
+    isLoading: !!localStorage.getItem("accessToken"), // <--- loading initially if we have a token
   });
 
   const login = useCallback(async (payload: LoginPayload) => {
@@ -67,6 +67,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem("refreshToken");
     setState({ user: null, isAuthenticated: false, isLoading: false });
   }, []);
+
+  React.useEffect(() => {
+    const refreshSession = async () => {
+      const token = localStorage.getItem("accessToken");
+      if (token) {
+        try {
+          const user = await apiService.getMe();
+          localStorage.setItem("user", JSON.stringify(user));
+          setState({ user, isAuthenticated: true, isLoading: false });
+        } catch (err) {
+          console.error("Session refresh failed", err);
+          logout();
+        }
+      } else {
+        setState({ user: null, isAuthenticated: false, isLoading: false });
+      }
+    };
+
+    refreshSession();
+  }, [logout]);
 
   return (
     <AuthContext.Provider value={{ ...state, login, register, initializeSession, logout }}>
