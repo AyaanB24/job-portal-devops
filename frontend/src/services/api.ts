@@ -2,7 +2,7 @@ import { User, LoginPayload, RegisterPayload, UserRole } from "@/types/User";
 import { Job, PostJobPayload } from "@/types/Job";
 import { Application } from "@/types/Application";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const API_URL = import.meta.env.VITE_API_URL || "/api";
 
 const getHeaders = () => {
   const token = localStorage.getItem("accessToken");

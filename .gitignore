@@ -40,3 +40,8 @@ frontend/.env
 # OS related
 Thumbs.db
 db.json
+# Docker Guides & Summaries
+DOCKER_GUIDE.md
+DOCKER_SUMMARY.md
+implementation_plan.md
+TECHSTACK.md

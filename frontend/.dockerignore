@@ -1,0 +1,15 @@
+node_modules
+dist
+.env
+.git
+.gitignore
+npm-debug.log
+Dockerfile
+.dockerignore
+README.md
+tests
+coverage
+# Vite build files
+.vite
+# Vitest files
+vitest.config.ts
