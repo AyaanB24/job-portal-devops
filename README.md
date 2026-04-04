@@ -9,89 +9,76 @@ A production-ready job portal featuring MongoDB persistence, Google OAuth, compa
 
 ---
 
+## 🐳 Dockerized Deployment (Recommended)
+
+The easiest way to run the entire stack (Frontend, Backend, and MongoDB) is using **Docker Compose**. 
+
+### 1. Prerequisites
+- **Docker Desktop** installed and running.
+- **Google OAuth Client ID/Secret** from Google Cloud Console.
+- **Gmail App Passwords** for SMTP verification.
+
+### 2. Configuration
+Create a `.env` file in the **`backend`** directory (see `.env.example` if available). 
+Ensuring your `FRONTEND_URL` is set to `http://localhost`.
+
+### 3. Quick Start
+Run the following command in the project root:
+```bash
+docker-compose up -d --build
+```
+
+- **Frontend**: [http://localhost](http://localhost) (Port 80)
+- **Backend API**: [http://localhost:5000/api](http://localhost:5000/api)
+- **API Documentation**: [http://localhost:5000/docs](http://localhost:5000/docs)
+- **MongoDB Compass**: `mongodb://admin:password123@localhost:27017/jobportal?authSource=admin`
+
+---
+
 ## 🏗 System Architecture
 
-The following diagram illustrates the interaction between the Frontend, Backend, and Database:
+The project uses a **Containerized Microservices** architecture with **Nginx** acting as a high-performance Reverse Proxy and API Gateway.
 
 ```mermaid
 graph TD
-    User([User]) <--> Frontend[React + Vite Frontend]
-    Frontend <--> API_Gateway[NestJS API Gateway]
+    User([User]) <--> Nginx[Nginx Gateway :80]
     
-    subgraph backend [Backend Services]
-        API_Gateway <--> Auth[Auth Service / Passport / JWT]
-        API_Gateway <--> Mail[Nodemailer Verification Service]
-        API_Gateway <--> Jobs[Jobs Service]
-        API_Gateway <--> Apps[Applications Service]
-        API_Gateway <--> Notif[Socket.IO Notifications]
+    subgraph docker [Docker Compose Network]
+        Nginx <--> Frontend[React Frontend Container]
+        Nginx <--> Backend[NestJS Backend Container :5000]
+        Backend <--> MongoDB[(MongoDB Container :27017)]
     end
     
-    Auth <--> DB[(MongoDB / Mongoose)]
-    Jobs <--> DB
-    Apps <--> DB
-    
-    Notif -.-> |Real-time Updates| Frontend
+    Backend -.-> |SMTP| Mail[Gmail API]
+    Backend -.-> |OAuth| Google[Google Cloud Console]
 ```
 
 ---
 
 ## ✨ Features
 
-- **Multi-Role Support**: specialized dashboards for **Job Seekers**, **Employers**, and **Admins**.
-- **Social Authentication**: Google OAuth integration for Job Seekers (local credentials for Employers).
-- **Company Identity Verification**: Secure email-based registration flow with token verification via Nodemailer.
-- **Advanced UI/UX**: Premium landing page with **Hero sections**, **Feature highlights**, **Testimonials**, and **Brand slider**.
-- **Persistent Storage**: MongoDB with Mongoose schemas for Users, Jobs, and Applications.
-- **Real-time Notifications**: Socket.IO alerts for job postings, application status updates, and new applicant notifications.
-- **Enterprise-Grade Auth**: JWT-based session management with refresh token capability.
-- **Modern Tech Stack**: Built with `shadcn/ui`, `Tailwind CSS`, `Framer Motion`, and `Lucide` icons.
+- **Dockerized Architecture**: One-command setup for the entire full-stack application.
+- **Nginx API Gateway**: Unified access point for frontend and backend on Port 80.
+- **Multi-Role Support**: Specialized dashboards for **Job Seekers**, **Employers**, and **Admins**.
+- **Social Authentication**: Google OAuth integration for Job Seekers.
+- **Company Verification**: Secure email-based registration flow with token verification via Nodemailer.
+- **Real-time Notifications**: Socket.IO alerts for job postings and status updates.
+- **Modern UI**: Built with `shadcn/ui`, `Tailwind CSS`, `Framer Motion`, and `Lucide` icons.
 
 ---
 
-## 📥 Getting Started
+## 🛠 Manual Installation (Development)
 
-### 1. Prerequisites
-- **Node.js**: v18+
-- **MongoDB**: Local community server or Atlas URI.
-- **Google Cloud Console**: OAuth Client ID/Secret.
-- **Email Gateway**: SMTP server details (Gmail App Passwords or similar).
+If you prefer to run the services manually without Docker:
 
-### 2. Configuration
-Create a `.env` file in the **`backend`** directory:
-```env
-# Database & Auth
-MONGO_URI=your_mongodb_uri
-JWT_SECRET=your_secret_key
-JWT_EXPIRES_IN=1d
-
-# Google OAuth
-GOOGLE_CLIENT_ID=your_google_id
-GOOGLE_CLIENT_SECRET=your_google_secret
-GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
-
-# Email Configuration (Nodemailer)
-MAIL_HOST=smtp.gmail.com
-MAIL_PORT=587
-MAIL_USER=your_email@gmail.com
-MAIL_PASS=your_app_password
-MAIL_FROM="NexusCore Admin <admin@nexuscore.com>"
-
-# App URLs
-FRONTEND_URL=http://localhost:8080
-PORT=5000
-```
-
-### 3. Installation & Run
-You must open TWO separate terminals:
-
-#### **Terminal 1: Backend**
+### 1. Backend
 ```bash
 cd backend
 npm install
 npm run start:dev
 ```
 
-#### **Terminal 2: Frontend**
+### 2. Frontend
 ```bash
 cd frontend
 npm install
